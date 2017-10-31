@@ -3,14 +3,14 @@
 package gohive
 
 import (
-	//"context"
+	"context"
 	//"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
 	"time"
 
-	inf "git.dev.acewill.net/rpc/gohive/tcliservice"
+	inf "git.dev.acewill.net/rpc/Gohive/inf"
 	//inf "github.com/dazheng/gohive/tcliservice"
 
 	"git.apache.org/thrift.git/lib/go/thrift"
