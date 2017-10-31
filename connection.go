@@ -3,7 +3,7 @@
 package gohive
 
 import (
-	"context"
+	//"context"
 	//"encoding/json"
 	"errors"
 	"fmt"
@@ -33,6 +33,14 @@ type Connection struct {
 	options Options
 }
 
+// Represents job status, including success state and time the
+// status was updated.
+type Status struct {
+	state *inf.TOperationState
+	Error error
+	At    time.Time
+}
+
 func Connect(host string, options Options) (*Connection, error) {
 	transport, err := thrift.NewTSocket(host)
 	if err != nil {
@@ -57,7 +65,7 @@ func Connect(host string, options Options) (*Connection, error) {
 	s := inf.NewTOpenSessionReq()
 	s.ClientProtocol = 6
 	//	session, err := client.OpenSession(inf.NewTOpenSessionReq())
-	session, err := client.OpenSession(context.Background(), s)
+	session, err := client.OpenSession(s)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +83,7 @@ func (c *Connection) Close() error {
 	if c.isOpen() {
 		closeReq := inf.NewTCloseSessionReq()
 		closeReq.SessionHandle = c.session
-		resp, err := c.thrift.CloseSession(context.Background(), closeReq)
+		resp, err := c.thrift.CloseSession(closeReq)
 		if err != nil {
 			return fmt.Errorf("Error closing session: ", resp, err)
 		}
@@ -88,25 +96,25 @@ func (c *Connection) Close() error {
 
 // Issue a query on an open connection, returning a RowSet, which
 // can be later used to query the operation's status.
-func (c *Connection) Query(query string) (RowSet, error) {
-	executeReq := inf.NewTExecuteStatementReq()
-	executeReq.SessionHandle = c.session
-	executeReq.Statement = query
-	executeReq.RunAsync = true
+//func (c *Connection) Query(query string) (RowSet, error) {
+//	executeReq := inf.NewTExecuteStatementReq()
+//	executeReq.SessionHandle = c.session
+//	executeReq.Statement = query
+//	executeReq.RunAsync = true
 
-	resp, err := c.thrift.ExecuteStatement(context.Background(), executeReq)
-	if err != nil {
-		return nil, fmt.Errorf("Error in ExecuteStatement: %+v, %v", resp, err)
-	}
+//	resp, err := c.thrift.ExecuteStatement(executeReq)
+//	if err != nil {
+//		return nil, fmt.Errorf("Error in ExecuteStatement: %+v, %v", resp, err)
+//	}
 
-	if !isSuccessStatus(resp.Status) {
-		return nil, fmt.Errorf("Error from server: %s", resp.Status.String())
-	}
+//	if !isSuccessStatus(resp.Status) {
+//		return nil, fmt.Errorf("Error from server: %s", resp.Status.String())
+//	}
 
-	fmt.Println("push query ok:", query)
+//	fmt.Println("push query ok:", query)
 
-	return newRowSet(c.thrift, resp.OperationHandle, c.options), nil
-}
+//	return newRowSet(c.thrift, resp.OperationHandle, c.options), nil
+//}
 
 func (c *Connection) ExecMode(query string, isAsync bool) (*inf.TOperationHandle, error) {
 	executeReq := inf.NewTExecuteStatementReq()
@@ -115,7 +123,7 @@ func (c *Connection) ExecMode(query string, isAsync bool) (*inf.TOperationHandle
 	executeReq.RunAsync = isAsync
 	executeReq.QueryTimeout = DefaultOptions.QueryTimeout
 
-	resp, err := c.thrift.ExecuteStatement(context.Background(), executeReq)
+	resp, err := c.thrift.ExecuteStatement(executeReq)
 	if err != nil {
 		return nil, fmt.Errorf("Error in ExecuteStatement: %+v, %v", resp, err)
 	}
@@ -142,7 +150,7 @@ func (c *Connection) FetchOne(op *inf.TOperationHandle) (rows *inf.TRowSet, hasM
 	fetchReq.Orientation = inf.TFetchOrientation_FETCH_NEXT
 	fetchReq.MaxRows = DefaultOptions.BatchSize
 
-	resp, err := c.thrift.FetchResults(context.Background(), fetchReq)
+	resp, err := c.thrift.FetchResults(fetchReq)
 	if err != nil {
 		fmt.Printf("FetchResults failed: %v\n", err)
 		return nil, false, err
@@ -169,7 +177,7 @@ func (c *Connection) GetMetadata(op *inf.TOperationHandle) (*inf.TTableSchema, e
 	req := inf.NewTGetResultSetMetadataReq()
 	req.OperationHandle = op
 
-	resp, err := c.thrift.GetResultSetMetadata(context.Background(), req)
+	resp, err := c.thrift.GetResultSetMetadata(req)
 
 	if err != nil {
 		fmt.Println("GetMetadata failed:", err)
@@ -327,7 +335,7 @@ func (c *Connection) CheckStatus(operation *inf.TOperationHandle) (*Status, erro
 
 	fmt.Println("will request GetOperationStatus")
 
-	resp, err := c.thrift.GetOperationStatus(context.Background(), req)
+	resp, err := c.thrift.GetOperationStatus(req)
 	if err != nil {
 		return nil, fmt.Errorf("Error getting status: %+v, %v", resp, err)
 	}
@@ -364,4 +372,55 @@ func (c *Connection) WaitForOk(operation *inf.TOperationHandle) (*Status, error)
 		time.Sleep(time.Duration(DefaultOptions.PollIntervalSeconds) * time.Second)
 	}
 	return nil, errors.New("Cannot run here when wait for operation ok")
+}
+
+// Returns a string representation of operation status.
+func (s Status) String() string {
+	if s.state == nil {
+		return "unknown"
+	}
+	return s.state.String()
+}
+
+// Returns true if the job has completed or failed.
+func (s Status) IsComplete() bool {
+	if s.state == nil {
+		return false
+	}
+
+	switch *s.state {
+	case inf.TOperationState_FINISHED_STATE,
+		inf.TOperationState_CANCELED_STATE,
+		inf.TOperationState_CLOSED_STATE,
+		inf.TOperationState_ERROR_STATE:
+		return true
+	}
+
+	return false
+}
+
+// Returns true if the job compelted successfully.
+
+func (s Status) IsSuccess() bool {
+	if s.state == nil {
+		return false
+	}
+
+	return *s.state == inf.TOperationState_FINISHED_STATE
+}
+
+func deserializeOp(handle []byte) (*inf.TOperationHandle, error) {
+	ser := thrift.NewTDeserializer()
+	var val inf.TOperationHandle
+
+	if err := ser.Read(&val, handle); err != nil {
+		return nil, err
+	}
+
+	return &val, nil
+}
+
+func serializeOp(operation *inf.TOperationHandle) ([]byte, error) {
+	ser := thrift.NewTSerializer()
+	return ser.Write(operation)
 }
