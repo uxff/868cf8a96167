@@ -108,7 +108,7 @@ func (c *Connection) Query(query string) (RowSet, error) {
 	return newRowSet(c.thrift, resp.OperationHandle, c.options), nil
 }
 
-func (c *Connection) ExecMode(query string, isAsync bool) (*inf.TExecuteStatementResp, error) {
+func (c *Connection) ExecMode(query string, isAsync bool) (*inf.TOperationHandle, error) {
 	executeReq := inf.NewTExecuteStatementReq()
 	executeReq.SessionHandle = c.session
 	executeReq.Statement = query
@@ -124,10 +124,10 @@ func (c *Connection) ExecMode(query string, isAsync bool) (*inf.TExecuteStatemen
 		return nil, fmt.Errorf("Error from server: %s", resp.Status.String())
 	}
 
-	return resp, err
+	return resp.OperationHandle, err
 }
 
-func (c *Connection) Exec(query string) (*inf.TExecuteStatementResp, error) {
+func (c *Connection) Exec(query string) (*inf.TOperationHandle, error) {
 	return c.ExecMode(query, false)
 }
 
@@ -136,9 +136,9 @@ func isSuccessStatus(p *inf.TStatus) bool {
 	return status == inf.TStatusCode_SUCCESS_STATUS || status == inf.TStatusCode_SUCCESS_WITH_INFO_STATUS
 }
 
-func (c *Connection) FetchOne(r *inf.TExecuteStatementResp) (rows *inf.TRowSet, hasMoreRows bool, e error) {
+func (c *Connection) FetchOne(op *inf.TOperationHandle) (rows *inf.TRowSet, hasMoreRows bool, e error) {
 	fetchReq := inf.NewTFetchResultsReq()
-	fetchReq.OperationHandle = r.OperationHandle
+	fetchReq.OperationHandle = op
 	fetchReq.Orientation = inf.TFetchOrientation_FETCH_NEXT
 	fetchReq.MaxRows = DefaultOptions.BatchSize
 
@@ -165,9 +165,9 @@ func (c *Connection) FetchOne(r *inf.TExecuteStatementResp) (rows *inf.TRowSet, 
 	return rows, resp.GetHasMoreRows(), nil
 }
 
-func (c *Connection) GetMetadata(r *inf.TExecuteStatementResp) (*inf.TTableSchema, error) {
+func (c *Connection) GetMetadata(op *inf.TOperationHandle) (*inf.TTableSchema, error) {
 	req := inf.NewTGetResultSetMetadataReq()
-	req.OperationHandle = r.OperationHandle
+	req.OperationHandle = op
 
 	resp, err := c.thrift.GetResultSetMetadata(context.Background(), req)
 
@@ -193,19 +193,19 @@ func (c *Connection) GetMetadata(r *inf.TExecuteStatementResp) (*inf.TTableSchem
 	4. Convert to map
 */
 func (c *Connection) SimpleQuery(sql string) (rets []map[string]interface{}, err error) {
-	resp, err := c.ExecMode(sql, true)
+	operate, err := c.ExecMode(sql, true)
 	if err != nil {
 		return nil, err
 	}
 
 	// wait for ok
-	status, err := c.WaitForOk(resp.GetOperationHandle())
+	status, err := c.WaitForOk(operate)
 	if err != nil {
 		fmt.Println("when waiting occur error:", err, " status=", status.String())
 		return nil, err
 	}
 
-	schema, err := c.GetMetadata(resp)
+	schema, err := c.GetMetadata(operate)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func (c *Connection) SimpleQuery(sql string) (rets []map[string]interface{}, err
 	for {
 		var rowLen int
 
-		rows, hasMore, err := c.FetchOne(resp)
+		rows, hasMore, err := c.FetchOne(operate)
 		if rows == nil || err != nil {
 			fmt.Println("the FetchResult is nil")
 			return nil, err
