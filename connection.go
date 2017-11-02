@@ -7,6 +7,7 @@ import (
 	//"encoding/json"
 	"errors"
 	"fmt"
+    "log"
 	"reflect"
 	"time"
 
@@ -152,12 +153,12 @@ func (c *Connection) FetchOne(op *inf.TOperationHandle) (rows *inf.TRowSet, hasM
 
 	resp, err := c.thrift.FetchResults(fetchReq)
 	if err != nil {
-		fmt.Printf("FetchResults failed: %v\n", err)
+	    log.Printf("FetchResults failed: %v\n", err)
 		return nil, false, err
 	}
 
 	if !isSuccessStatus(resp.Status) {
-		fmt.Printf("FetchResults failed: %s\n", resp.Status.String())
+		log.Printf("FetchResults failed: %s\n", resp.Status.String())
 		return nil, false, errors.New("FetchResult failed, status not ok: " + resp.Status.String())
 	}
 
@@ -167,7 +168,7 @@ func (c *Connection) FetchOne(op *inf.TOperationHandle) (rows *inf.TRowSet, hasM
 
 	// for json debug
 	//jret, jerr := json.Marshal(rows)
-	//fmt.Println("json rows=", string(jret), jerr)
+	//log.Println("json rows=", string(jret), jerr)
 
 	// GetHasMoreRow()没生效，返回总是false
 	return rows, resp.GetHasMoreRows(), nil
@@ -180,7 +181,7 @@ func (c *Connection) GetMetadata(op *inf.TOperationHandle) (*inf.TTableSchema, e
 	resp, err := c.thrift.GetResultSetMetadata(req)
 
 	if err != nil {
-		fmt.Println("GetMetadata failed:", err)
+		log.Println("GetMetadata failed:", err)
 		return nil, err
 	}
 
@@ -188,7 +189,7 @@ func (c *Connection) GetMetadata(op *inf.TOperationHandle) (*inf.TTableSchema, e
 
 	// for json debug
 	//jret, jerr := json.Marshal(schema)
-	//fmt.Println("schema=", string(jret), jerr)
+	//log.Println("schema=", string(jret), jerr)
 
 	return schema, nil
 }
@@ -209,7 +210,7 @@ func (c *Connection) SimpleQuery(sql string) (rets []map[string]interface{}, err
 	// wait for ok
 	status, err := c.WaitForOk(operate)
 	if err != nil {
-		fmt.Println("when waiting occur error:", err, " status=", status.String())
+		log.Println("when waiting occur error:", err, " status=", status.String())
 		return nil, err
 	}
 
@@ -248,7 +249,7 @@ func (c *Connection) SimpleQuery(sql string) (rets []map[string]interface{}, err
 
 		rows, hasMore, err := c.FetchOne(operate)
 		if rows == nil || err != nil {
-			fmt.Println("the FetchResult is nil")
+			log.Println("the FetchResult is nil")
 			return nil, err
 		}
 
@@ -262,14 +263,14 @@ func (c *Connection) SimpleQuery(sql string) (rets []map[string]interface{}, err
 
 		// hasMoreRow 没生效
 		if !hasMore {
-			fmt.Println("now more rows, this time rowlen=", rowLen, "StartRowOffset=", rows.StartRowOffset)
+			log.Println("now more rows, this time rowlen=", rowLen, "StartRowOffset=", rows.StartRowOffset)
 			//break
 		} else {
-			fmt.Println("has more rows, this time rowlen=", rowLen, "StartRowOffset=", rows.StartRowOffset)
+			log.Println("has more rows, this time rowlen=", rowLen, "StartRowOffset=", rows.StartRowOffset)
 		}
 		// 需要从返回的数量里判断任务有没有进行完
 		if rowLen <= 0 {
-			fmt.Println("no more rows find, rowlen=", rowLen)
+			log.Println("no more rows find, rowlen=", rowLen)
 			break
 		}
 	}
@@ -282,7 +283,7 @@ func (c *Connection) CheckStatus(operation *inf.TOperationHandle) (*Status, erro
 	req := inf.NewTGetOperationStatusReq()
 	req.OperationHandle = operation
 
-	fmt.Println("will request GetOperationStatus")
+	log.Println("will request GetOperationStatus")
 
 	resp, err := c.thrift.GetOperationStatus(req)
 	if err != nil {
@@ -297,7 +298,7 @@ func (c *Connection) CheckStatus(operation *inf.TOperationHandle) (*Status, erro
 		return nil, errors.New("No error from GetStatus, but nil status!")
 	}
 
-	fmt.Println("OperationStatus", resp.GetOperationState(), "ProgressUpdate=", resp.GetProgressUpdateResponse())
+	log.Println("OperationStatus", resp.GetOperationState(), "ProgressUpdate=", resp.GetProgressUpdateResponse())
 
 	return &Status{resp.OperationState, nil, time.Now()}, nil
 }
