@@ -252,62 +252,11 @@ func (c *Connection) SimpleQuery(sql string) (rets []map[string]interface{}, err
 			return nil, err
 		}
 
-		//var colNames []string
-		var colValues = make(map[string]interface{}, 0)
+		var batchRets []map[string]interface{}
+		batchRets, err = c.FormatRows(rows, schema)
 
-		for cpos, tcol := range rows.Columns {
-			// 此循环内遍历列名 取出所有列下的结果
-
-			colName := schema.Columns[cpos].ColumnName
-
-			//fmt.Println("cpos=", cpos, "tcol=", tcol)
-
-			switch true {
-			case tcol.IsSetBinaryVal():
-				//fmt.Println("IsSetBinaryVal")
-				colValues[colName] = tcol.GetBinaryVal().GetValues()
-				rowLen = len(tcol.GetBinaryVal().GetValues())
-			case tcol.IsSetBoolVal():
-				//fmt.Println("IsSetBoolVal")
-				colValues[colName] = tcol.GetBoolVal().GetValues()
-				rowLen = len(tcol.GetBoolVal().GetValues())
-			case tcol.IsSetByteVal():
-				//fmt.Println("IsSetByteVal")
-				colValues[colName] = tcol.GetByteVal().GetValues()
-				rowLen = len(tcol.GetByteVal().GetValues())
-			case tcol.IsSetDoubleVal():
-				//fmt.Println("IsSetDoubleVal", tcol.GetDoubleVal().GetValues())
-				colValues[colName] = tcol.GetDoubleVal().GetValues()
-				rowLen = len(tcol.GetDoubleVal().GetValues())
-			case tcol.IsSetI16Val():
-				//fmt.Println("IsSetI16Val", tcol.GetI16Val().GetValues())
-				colValues[colName] = tcol.GetI16Val().GetValues()
-				rowLen = len(tcol.GetI16Val().GetValues())
-			case tcol.IsSetI32Val():
-				//fmt.Println("IsSetI32Val", tcol.GetI32Val().GetValues())
-				colValues[colName] = tcol.GetI32Val().GetValues()
-				rowLen = len(tcol.GetI32Val().GetValues())
-			case tcol.IsSetI64Val():
-				//fmt.Println("IsSetI64Val", tcol.GetI64Val().GetValues())
-				colValues[colName] = tcol.GetI64Val().GetValues()
-				rowLen = len(tcol.GetI64Val().GetValues())
-			case tcol.IsSetStringVal():
-				//fmt.Println("IsSetStringVal")
-				colValues[colName] = tcol.GetStringVal().GetValues()
-				rowLen = len(tcol.GetStringVal().GetValues())
-			}
-		}
-
-		// 将列结构转换成行结构
-		for i := 0; i < rowLen; i++ {
-			formatedRow := make(map[string]interface{}, 0)
-			for colName, colValueList := range colValues {
-				// column => [v1, v2, v3, ...]
-				formatedRow[colName] = reflect.ValueOf(colValueList).Index(i).Interface()
-			}
-
-			rets = append(rets, formatedRow)
-		}
+		rowLen = len(batchRets)
+		rets = append(rets, batchRets...)
 
 		recvLen += rowLen
 
@@ -409,7 +358,7 @@ func (s Status) IsSuccess() bool {
 	return *s.state == inf.TOperationState_FINISHED_STATE
 }
 
-func deserializeOp(handle []byte) (*inf.TOperationHandle, error) {
+func DeserializeOp(handle []byte) (*inf.TOperationHandle, error) {
 	ser := thrift.NewTDeserializer()
 	var val inf.TOperationHandle
 
@@ -420,7 +369,68 @@ func deserializeOp(handle []byte) (*inf.TOperationHandle, error) {
 	return &val, nil
 }
 
-func serializeOp(operation *inf.TOperationHandle) ([]byte, error) {
+func SerializeOp(operation *inf.TOperationHandle) ([]byte, error) {
 	ser := thrift.NewTSerializer()
 	return ser.Write(operation)
+}
+
+func (c *Connection) FormatRows(rows *inf.TRowSet, schema *inf.TTableSchema) (rets []map[string]interface{}, err error) {
+	var colValues = make(map[string]interface{}, 0)
+	var rowLen int
+
+	for cpos, tcol := range rows.Columns {
+		// 此循环内遍历列名 取出所有列下的结果
+
+		colName := schema.Columns[cpos].ColumnName
+
+		//fmt.Println("cpos=", cpos, "tcol=", tcol)
+
+		switch true {
+		case tcol.IsSetBinaryVal():
+			//fmt.Println("IsSetBinaryVal")
+			colValues[colName] = tcol.GetBinaryVal().GetValues()
+			rowLen = len(tcol.GetBinaryVal().GetValues())
+		case tcol.IsSetBoolVal():
+			//fmt.Println("IsSetBoolVal")
+			colValues[colName] = tcol.GetBoolVal().GetValues()
+			rowLen = len(tcol.GetBoolVal().GetValues())
+		case tcol.IsSetByteVal():
+			//fmt.Println("IsSetByteVal")
+			colValues[colName] = tcol.GetByteVal().GetValues()
+			rowLen = len(tcol.GetByteVal().GetValues())
+		case tcol.IsSetDoubleVal():
+			//fmt.Println("IsSetDoubleVal", tcol.GetDoubleVal().GetValues())
+			colValues[colName] = tcol.GetDoubleVal().GetValues()
+			rowLen = len(tcol.GetDoubleVal().GetValues())
+		case tcol.IsSetI16Val():
+			//fmt.Println("IsSetI16Val", tcol.GetI16Val().GetValues())
+			colValues[colName] = tcol.GetI16Val().GetValues()
+			rowLen = len(tcol.GetI16Val().GetValues())
+		case tcol.IsSetI32Val():
+			//fmt.Println("IsSetI32Val", tcol.GetI32Val().GetValues())
+			colValues[colName] = tcol.GetI32Val().GetValues()
+			rowLen = len(tcol.GetI32Val().GetValues())
+		case tcol.IsSetI64Val():
+			//fmt.Println("IsSetI64Val", tcol.GetI64Val().GetValues())
+			colValues[colName] = tcol.GetI64Val().GetValues()
+			rowLen = len(tcol.GetI64Val().GetValues())
+		case tcol.IsSetStringVal():
+			//fmt.Println("IsSetStringVal")
+			colValues[colName] = tcol.GetStringVal().GetValues()
+			rowLen = len(tcol.GetStringVal().GetValues())
+		}
+	}
+
+	// 将列结构转换成行结构
+	for i := 0; i < rowLen; i++ {
+		formatedRow := make(map[string]interface{}, 0)
+		for colName, colValueList := range colValues {
+			// column => [v1, v2, v3, ...]
+			formatedRow[colName] = reflect.ValueOf(colValueList).Index(i).Interface()
+		}
+
+		rets = append(rets, formatedRow)
+	}
+
+	return rets, nil
 }
