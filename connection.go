@@ -495,7 +495,7 @@ func (c *Connection) FormatHeads(schema *inf.TTableSchema) (outHead[]string, err
 		return
 	}
 	for _, col := range schema.Columns {
-		outHead = append(outHead, fmt.Sprint("%v", col.GetColumnName()))
+		outHead = append(outHead, col.GetColumnName())
 	}
 	return
 }
