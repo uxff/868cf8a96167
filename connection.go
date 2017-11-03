@@ -7,6 +7,7 @@ import (
 	//"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"reflect"
 	"time"
 
@@ -111,7 +112,7 @@ func (c *Connection) Close() error {
 //		return nil, fmt.Errorf("Error from server: %s", resp.Status.String())
 //	}
 
-//	fmt.Println("push query ok:", query)
+//	log.Println("push query ok:", query)
 
 //	return newRowSet(c.thrift, resp.OperationHandle, c.options), nil
 //}
@@ -163,11 +164,11 @@ func (c *Connection) FetchOne(op *inf.TOperationHandle) (rows *inf.TRowSet, hasM
 
 	rows = resp.GetResults() // return *TRowSet{StartRowOffset int64, Rows []*TRow, Columns []*TColumn, BinaryColumns []byte, ColumnCount *int32}
 
-	//fmt.Println("the fetch rows=", rows)
+	//log.Println("the fetch rows=", rows)
 
 	// for json debug
 	//jret, jerr := json.Marshal(rows)
-	//fmt.Println("json rows=", string(jret), jerr)
+	//log.Println("json rows=", string(jret), jerr)
 
 	// GetHasMoreRow()没生效，返回总是false
 	return rows, resp.GetHasMoreRows(), nil
@@ -180,7 +181,7 @@ func (c *Connection) GetMetadata(op *inf.TOperationHandle) (*inf.TTableSchema, e
 	resp, err := c.thrift.GetResultSetMetadata(req)
 
 	if err != nil {
-		fmt.Println("GetMetadata failed:", err)
+		log.Println("GetMetadata failed:", err)
 		return nil, err
 	}
 
@@ -188,7 +189,7 @@ func (c *Connection) GetMetadata(op *inf.TOperationHandle) (*inf.TTableSchema, e
 
 	// for json debug
 	//jret, jerr := json.Marshal(schema)
-	//fmt.Println("schema=", string(jret), jerr)
+	//log.Println("schema=", string(jret), jerr)
 
 	return schema, nil
 }
@@ -209,7 +210,7 @@ func (c *Connection) SimpleQuery(sql string) (rets []map[string]interface{}, err
 	// wait for ok
 	status, err := c.WaitForOk(operate)
 	if err != nil {
-		fmt.Println("when waiting occur error:", err, " status=", status.String())
+		log.Println("when waiting occur error:", err, " status=", status.String())
 		return nil, err
 	}
 
@@ -248,12 +249,12 @@ func (c *Connection) SimpleQuery(sql string) (rets []map[string]interface{}, err
 
 		rows, hasMore, err := c.FetchOne(operate)
 		if rows == nil || err != nil {
-			fmt.Println("the FetchResult is nil")
+			log.Println("the FetchResult is nil")
 			return nil, err
 		}
 
 		var batchRets []map[string]interface{}
-		batchRets, err = c.FormatRows(rows, schema)
+		batchRets, err = c.FormatRowsAsMap(rows, schema)
 
 		rowLen = len(batchRets)
 		rets = append(rets, batchRets...)
@@ -262,14 +263,14 @@ func (c *Connection) SimpleQuery(sql string) (rets []map[string]interface{}, err
 
 		// hasMoreRow 没生效
 		if !hasMore {
-			fmt.Println("now more rows, this time rowlen=", rowLen, "StartRowOffset=", rows.StartRowOffset)
+			log.Println("now more rows, this time rowlen=", rowLen, "StartRowOffset=", rows.StartRowOffset)
 			//break
 		} else {
-			fmt.Println("has more rows, this time rowlen=", rowLen, "StartRowOffset=", rows.StartRowOffset)
+			log.Println("has more rows, this time rowlen=", rowLen, "StartRowOffset=", rows.StartRowOffset)
 		}
 		// 需要从返回的数量里判断任务有没有进行完
 		if rowLen <= 0 {
-			fmt.Println("no more rows find, rowlen=", rowLen)
+			log.Println("no more rows find, rowlen=", rowLen)
 			break
 		}
 	}
@@ -282,7 +283,7 @@ func (c *Connection) CheckStatus(operation *inf.TOperationHandle) (*Status, erro
 	req := inf.NewTGetOperationStatusReq()
 	req.OperationHandle = operation
 
-	fmt.Println("will request GetOperationStatus")
+	log.Println("will request GetOperationStatus")
 
 	resp, err := c.thrift.GetOperationStatus(req)
 	if err != nil {
@@ -297,7 +298,7 @@ func (c *Connection) CheckStatus(operation *inf.TOperationHandle) (*Status, erro
 		return nil, errors.New("No error from GetStatus, but nil status!")
 	}
 
-	fmt.Println("OperationStatus", resp.GetOperationState(), "ProgressUpdate=", resp.GetProgressUpdateResponse())
+	log.Println("OperationStatus", resp.GetOperationState(), "ProgressUpdate=", resp.GetProgressUpdateResponse())
 
 	return &Status{resp.OperationState, nil, time.Now()}, nil
 }
@@ -374,7 +375,10 @@ func SerializeOp(operation *inf.TOperationHandle) ([]byte, error) {
 	return ser.Write(operation)
 }
 
-func (c *Connection) FormatRows(rows *inf.TRowSet, schema *inf.TTableSchema) (rets []map[string]interface{}, err error) {
+/*
+	将返回数据转换成map
+*/
+func (c *Connection) FormatRowsAsMap(rows *inf.TRowSet, schema *inf.TTableSchema) (rets []map[string]interface{}, err error) {
 	var colValues = make(map[string]interface{}, 0)
 	var rowLen int
 
@@ -383,39 +387,29 @@ func (c *Connection) FormatRows(rows *inf.TRowSet, schema *inf.TTableSchema) (re
 
 		colName := schema.Columns[cpos].ColumnName
 
-		//fmt.Println("cpos=", cpos, "tcol=", tcol)
-
 		switch true {
 		case tcol.IsSetBinaryVal():
-			//fmt.Println("IsSetBinaryVal")
 			colValues[colName] = tcol.GetBinaryVal().GetValues()
 			rowLen = len(tcol.GetBinaryVal().GetValues())
 		case tcol.IsSetBoolVal():
-			//fmt.Println("IsSetBoolVal")
 			colValues[colName] = tcol.GetBoolVal().GetValues()
 			rowLen = len(tcol.GetBoolVal().GetValues())
 		case tcol.IsSetByteVal():
-			//fmt.Println("IsSetByteVal")
 			colValues[colName] = tcol.GetByteVal().GetValues()
 			rowLen = len(tcol.GetByteVal().GetValues())
 		case tcol.IsSetDoubleVal():
-			//fmt.Println("IsSetDoubleVal", tcol.GetDoubleVal().GetValues())
 			colValues[colName] = tcol.GetDoubleVal().GetValues()
 			rowLen = len(tcol.GetDoubleVal().GetValues())
 		case tcol.IsSetI16Val():
-			//fmt.Println("IsSetI16Val", tcol.GetI16Val().GetValues())
 			colValues[colName] = tcol.GetI16Val().GetValues()
 			rowLen = len(tcol.GetI16Val().GetValues())
 		case tcol.IsSetI32Val():
-			//fmt.Println("IsSetI32Val", tcol.GetI32Val().GetValues())
 			colValues[colName] = tcol.GetI32Val().GetValues()
 			rowLen = len(tcol.GetI32Val().GetValues())
 		case tcol.IsSetI64Val():
-			//fmt.Println("IsSetI64Val", tcol.GetI64Val().GetValues())
 			colValues[colName] = tcol.GetI64Val().GetValues()
 			rowLen = len(tcol.GetI64Val().GetValues())
 		case tcol.IsSetStringVal():
-			//fmt.Println("IsSetStringVal")
 			colValues[colName] = tcol.GetStringVal().GetValues()
 			rowLen = len(tcol.GetStringVal().GetValues())
 		}
@@ -433,4 +427,75 @@ func (c *Connection) FormatRows(rows *inf.TRowSet, schema *inf.TTableSchema) (re
 	}
 
 	return rets, nil
+}
+
+/*将hive返回的数据转换成内容行*/
+func (c *Connection) FormatRows(rows *inf.TRowSet, schema *inf.TTableSchema) (rets[][]interface{}, err error) {
+	var colValues = make(map[string]interface{}, 0)
+	var rowLen int
+
+	// 以下循环处理后 colValues=[col1=>[line1v1,line2v1,...], col2=>[line1v2,line2v2]]
+	for cpos, tcol := range rows.Columns {
+		// 此循环内遍历列名 取出所有列下的结果
+
+		colName := schema.Columns[cpos].ColumnName
+
+		switch true {
+		case tcol.IsSetBinaryVal():
+			colValues[colName] = tcol.GetBinaryVal().GetValues()
+			rowLen = len(tcol.GetBinaryVal().GetValues())
+		case tcol.IsSetBoolVal():
+			colValues[colName] = tcol.GetBoolVal().GetValues()
+			rowLen = len(tcol.GetBoolVal().GetValues())
+		case tcol.IsSetByteVal():
+			colValues[colName] = tcol.GetByteVal().GetValues()
+			rowLen = len(tcol.GetByteVal().GetValues())
+		case tcol.IsSetDoubleVal():
+			colValues[colName] = tcol.GetDoubleVal().GetValues()
+			rowLen = len(tcol.GetDoubleVal().GetValues())
+		case tcol.IsSetI16Val():
+			colValues[colName] = tcol.GetI16Val().GetValues()
+			rowLen = len(tcol.GetI16Val().GetValues())
+		case tcol.IsSetI32Val():
+			colValues[colName] = tcol.GetI32Val().GetValues()
+			rowLen = len(tcol.GetI32Val().GetValues())
+		case tcol.IsSetI64Val():
+			colValues[colName] = tcol.GetI64Val().GetValues()
+			rowLen = len(tcol.GetI64Val().GetValues())
+		case tcol.IsSetStringVal():
+			colValues[colName] = tcol.GetStringVal().GetValues()
+			rowLen = len(tcol.GetStringVal().GetValues())
+		default:
+			err = fmt.Errorf("the value is unsupported: %v", tcol)
+			log.Println("when format rows:", err)
+		}
+	}
+
+	// 将列结构转换成行结构
+	for i := 0; i < rowLen; i++ {
+		// 遍历列
+		formatedRow := make([]interface{}, 0)
+		for _, colValueList := range colValues {
+			// 取每列中的第i行
+			// column => [v1, v2, v3, ...]
+			formatedRow = append(formatedRow, reflect.ValueOf(colValueList).Index(i).Interface())
+		}
+
+		rets = append(rets, formatedRow)
+	}
+
+	return rets, nil
+}
+
+/*返回格式化后的表头*/
+func (c *Connection) FormatHeads(schema *inf.TTableSchema) (outHead[]string, err error) {
+	//colName := schema.Columns[cpos].ColumnName
+	if schema == nil {
+		err = fmt.Errorf("schema is nil shen FormatHeads")
+		return
+	}
+	for _, col := range schema.Columns {
+		outHead = append(outHead, fmt.Sprint("%v", col.GetColumnName()))
+	}
+	return
 }
