@@ -270,7 +270,7 @@ func (c *Connection) SimpleQuery(sql string) (rets []map[string]interface{}, err
 		}
 		// 需要从返回的数量里判断任务有没有进行完
 		if rowLen <= 0 {
-			log.Println("no more rows find, rowlen=", rowLen)
+			log.Println("no more rows find, rowlen=", rowLen, "all got rowlen=", recvLen)
 			break
 		}
 	}
