@@ -7,7 +7,7 @@ import (
 	//"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+    "log"
 	"reflect"
 	"time"
 
@@ -153,12 +153,12 @@ func (c *Connection) FetchOne(op *inf.TOperationHandle) (rows *inf.TRowSet, hasM
 
 	resp, err := c.thrift.FetchResults(fetchReq)
 	if err != nil {
-		fmt.Printf("FetchResults failed: %v\n", err)
+	    log.Printf("FetchResults failed: %v\n", err)
 		return nil, false, err
 	}
 
 	if !isSuccessStatus(resp.Status) {
-		fmt.Printf("FetchResults failed: %s\n", resp.Status.String())
+		log.Printf("FetchResults failed: %s\n", resp.Status.String())
 		return nil, false, errors.New("FetchResult failed, status not ok: " + resp.Status.String())
 	}
 
