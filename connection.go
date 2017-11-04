@@ -283,7 +283,7 @@ func (c *Connection) CheckStatus(operation *inf.TOperationHandle) (*Status, erro
 	req := inf.NewTGetOperationStatusReq()
 	req.OperationHandle = operation
 
-	log.Println("will request GetOperationStatus")
+	//log.Println("will request GetOperationStatus")
 
 	resp, err := c.thrift.GetOperationStatus(req)
 	if err != nil {
@@ -298,7 +298,7 @@ func (c *Connection) CheckStatus(operation *inf.TOperationHandle) (*Status, erro
 		return nil, errors.New("No error from GetStatus, but nil status!")
 	}
 
-	log.Println("OperationStatus", resp.GetOperationState(), "ProgressUpdate=", resp.GetProgressUpdateResponse())
+	//log.Println("OperationStatus", resp.GetOperationState(), "ProgressUpdate=", resp.GetProgressUpdateResponse())
 
 	return &Status{resp.OperationState, nil, time.Now()}, nil
 }
@@ -429,13 +429,27 @@ func (c *Connection) FormatRowsAsMap(rows *inf.TRowSet, schema *inf.TTableSchema
 	return rets, nil
 }
 
-//func (c *Connection) convertOneCell(
+// 行列转换，并为参数申请内存
+func (c *Connection) convertColsToRows(colPos int, colLen int, colValues []interface{}, rowValues *[][]string) (rowLen int) {
+    rowLen = len(colValues)
+    if *rowValues == nil {
+        *rowValues = make([][]string, rowLen)
+    }
+    for i, oneCell := range colValues {
+        if (*rowValues)[i] == nil {
+            (*rowValues)[i] = make([]string, colLen)
+        }
+        (*rowValues)[i][colPos] = fmt.Sprintf("%v", oneCell)
+    }
+    return rowLen
+}
 
-/*将hive返回的数据转换成内容行*/
+/*将hive返回的数据转换成内容行 不使用reflect 不占用两份内存*/
 func (c *Connection) FormatRows(rows *inf.TRowSet, schema *inf.TTableSchema) (rets[][]string, err error) {
-	var colValues = make(map[string]interface{}, 0)
+	//var colValues = make(map[string]interface{}, 0)
 	var rowLen int
-    var retsMap []map[string]interface{}
+    var colLen = len(rows.Columns)
+    //var retsMap []map[string]interface{}
 
     colNames := make([]string, 0)
 
@@ -447,99 +461,107 @@ func (c *Connection) FormatRows(rows *inf.TRowSet, schema *inf.TTableSchema) (re
 		colName := schema.Columns[cpos].ColumnName
         colNames = append(colNames, colName)
 
+
 		switch true {
 		case tcol.IsSetStringVal():
+            //rowLen = c.convertColsToRows(cpos, colLen, tcol.GetStringVal().GetValues(), &rets)
             valuesOfCol := tcol.GetStringVal().GetValues()
 			rowLen = len(valuesOfCol)
-			colValues[colName] = valuesOfCol
-            if len(retsMap) == 0 {
-                log.Println("will remalloc retsMap", colName)
-                retsMap = make([]map[string]interface{}, rowLen)
+            if len(rets) == 0 {
+                //log.Println("will remalloc rets", colName)
+                rets = make([][]string, rowLen)
             }
             for i, oneCell := range valuesOfCol {
-                if retsMap[i] == nil {
-                    log.Println("will remalloc retsMap[", i, "]->", colName)
-                    retsMap[i] = make(map[string]interface{}, 0)
+                if rets[i] == nil {
+                    //log.Println("will remalloc rets[", i, "]->", "colName=", colName, "colType=",reflect.TypeOf(oneCell))
+                    rets[i] = make([]string, colLen)
                 }
-                log.Println("set retsMap[", i, "]->", colName, "=", oneCell)
-                retsMap[i][colName] = oneCell
+                //log.Println("set rets[", i, "]->", cpos, colName, "=", oneCell, reflect.TypeOf(oneCell))
+                rets[i][cpos] = fmt.Sprintf("%v",oneCell)
             }
 		case tcol.IsSetBinaryVal():
 			valuesOfCol := tcol.GetBinaryVal().GetValues()
 			rowLen = len(valuesOfCol)
-			colValues[colName] = valuesOfCol
-            if len(retsMap) == 0 {
-                log.Println("will remalloc retsMap", colName)
-                retsMap = make([]map[string]interface{}, rowLen)
+            if len(rets) == 0 {
+                rets = make([][]string, rowLen)
             }
             for i, oneCell := range valuesOfCol {
-                retsMap[i][colName] = oneCell
+                if rets[i] == nil {
+                    rets[i] = make([]string, colLen)
+                }
+                rets[i][cpos] = fmt.Sprintf("%v",oneCell)
             }
 		case tcol.IsSetBoolVal():
 			valuesOfCol := tcol.GetBoolVal().GetValues()
 			rowLen = len(valuesOfCol)//len(tcol.GetBoolVal().GetValues())
-			colValues[colName] = valuesOfCol
-            if len(retsMap) == 0 {
-                log.Println("will remalloc retsMap", colName)
-                retsMap = make([]map[string]interface{}, rowLen)
+            if len(rets) == 0 {
+                rets = make([][]string, rowLen)
             }
             for i, oneCell := range valuesOfCol {
-                retsMap[i][colName] = oneCell
+                if rets[i] == nil {
+                    rets[i] = make([]string, colLen)
+                }
+                rets[i][cpos] = fmt.Sprintf("%v",oneCell)
             }
 		case tcol.IsSetByteVal():
 			valuesOfCol := tcol.GetByteVal().GetValues()
 			rowLen = len(valuesOfCol)//len(tcol.GetByteVal().GetValues())
-			colValues[colName] = valuesOfCol
-            if len(retsMap) == 0 {
-                log.Println("will remalloc retsMap", colName)
-                retsMap = make([]map[string]interface{}, rowLen)
+            if len(rets) == 0 {
+                rets = make([][]string, rowLen)
             }
             for i, oneCell := range valuesOfCol {
-                retsMap[i][colName] = oneCell
+                if rets[i] == nil {
+                    rets[i] = make([]string, colLen)
+                }
+                rets[i][cpos] = fmt.Sprintf("%v",oneCell)
             }
 		case tcol.IsSetDoubleVal():
 			valuesOfCol := tcol.GetDoubleVal().GetValues()
 			rowLen = len(valuesOfCol)//len(tcol.GetDoubleVal().GetValues())
-			colValues[colName] = valuesOfCol
-            if len(retsMap) == 0 {
-                log.Println("will remalloc retsMap", colName)
-                retsMap = make([]map[string]interface{}, rowLen)
+            if len(rets) == 0 {
+                rets = make([][]string, rowLen)
             }
             for i, oneCell := range valuesOfCol {
-                retsMap[i][colName] = oneCell
+                if rets[i] == nil {
+                    rets[i] = make([]string, colLen)
+                }
+                rets[i][cpos] = fmt.Sprintf("%g",oneCell)
             }
 		case tcol.IsSetI16Val():
 		    valuesOfCol := tcol.GetI16Val().GetValues()
 			rowLen = len(valuesOfCol)//len(tcol.GetI16Val().GetValues())
-			colValues[colName] = valuesOfCol
-            if len(retsMap) == 0 {
-                log.Println("will remalloc retsMap")
-                retsMap = make([]map[string]interface{}, rowLen)
+            if len(rets) == 0 {
+                rets = make([][]string, rowLen)
             }
             for i, oneCell := range valuesOfCol {
-                retsMap[i][colName] = oneCell
+                if rets[i] == nil {
+                    rets[i] = make([]string, colLen)
+                }
+                rets[i][cpos] = fmt.Sprintf("%v",oneCell)
             }
 		case tcol.IsSetI32Val():
 			valuesOfCol := tcol.GetI32Val().GetValues()
 			rowLen = len(valuesOfCol)//len(tcol.GetI32Val().GetValues())
-			colValues[colName] = valuesOfCol
-            if len(retsMap) == 0 {
-                log.Println("will remalloc retsMap")
-                retsMap = make([]map[string]interface{}, rowLen)
+            if len(rets) == 0 {
+                rets = make([][]string, rowLen)
             }
             for i, oneCell := range valuesOfCol {
-                retsMap[i][colName] = oneCell
+                if rets[i] == nil {
+                    rets[i] = make([]string, colLen)
+                }
+                rets[i][cpos] = fmt.Sprintf("%v",oneCell)
             }
 		case tcol.IsSetI64Val():
 			valuesOfCol := tcol.GetI64Val().GetValues()
 			rowLen = len(valuesOfCol)//len(tcol.GetI64Val().GetValues())
-			colValues[colName] = valuesOfCol
-            if len(retsMap) == 0 {
-                log.Println("will remalloc retsMap")
-                retsMap = make([]map[string]interface{}, rowLen)
+            if len(rets) == 0 {
+                rets = make([][]string, rowLen)
             }
             for i, oneCell := range valuesOfCol {
-                retsMap[i][colName] = oneCell
+                if rets[i] == nil {
+                    rets[i] = make([]string, colLen)
+                }
+                rets[i][cpos] = fmt.Sprintf("%v",oneCell)
             }
 		default:
 			err = fmt.Errorf("the value is unsupported: %v", tcol)
@@ -547,8 +569,10 @@ func (c *Connection) FormatRows(rows *inf.TRowSet, schema *inf.TTableSchema) (re
 		}
 	}
 
-    log.Println("this time will format len=", rowLen, "retsMap=", retsMap)
+    log.Println("this fetch will format len=", rowLen, "rets=", rets)
 
+    return rets, nil
+/*
     rets = make([][]string, rowLen)
 
 	// 将列结构转换成行结构
@@ -562,7 +586,7 @@ func (c *Connection) FormatRows(rows *inf.TRowSet, schema *inf.TTableSchema) (re
         }
 
 	}
-
+*/
 	return rets, nil
 }
 
