@@ -14,3 +14,11 @@ go get -insecure "git.dev.acewill.net/rpc/Gohive"
 
 如果需要更新，则删除inf，将inf.ctx重命名为inf，进行go build会报错，将对应的thrift接口第一个参数增加context.Background(), 即可。
 
+sql语法中查询字段设置别名必须用反引号 ` 。
+
+例如
+
+```
+select tcid, uid `用户id`, bid+1, sid/100, tcphone, tccharge, tccreated from welife_welife_trade_charges_update_default limit 15
+```
+
