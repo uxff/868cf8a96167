@@ -591,7 +591,8 @@ func (c *Connection) CloseOperation(operate *inf.TOperationHandle) (err error) {
 
 	resp, err := c.thrift.CloseOperation(req)
 	if err != nil {
-		log.Printf("close operation error:%v", err)
+		log.Printf("close operation error:%v", err, "errmsg:", *resp.Status.ErrorMessage)
 	}
+
 	return err
 }
