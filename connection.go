@@ -585,3 +585,13 @@ func (c *Connection) GetOptions() *Options {
     return &c.options
 }
 
+func (c *Connection) CloseOperation(operate *inf.TOperationHandle) (err error) {
+	req := new(inf.TCloseOperationReq)
+	req.OperationHandle = operate
+
+	resp, err := c.thrift.CloseOperation(req)
+	if err != nil {
+		log.Printf("close operation error:%v", err)
+	}
+	return err
+}
