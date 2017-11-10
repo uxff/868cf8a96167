@@ -109,7 +109,7 @@ func (c *Connection) ExecMode(query string, isAsync bool) (*inf.TOperationHandle
 	}
 
 	if !isSuccessStatus(resp.Status) {
-		return nil, fmt.Errorf("Error from server: %s", resp.Status.String())
+		return nil, fmt.Errorf("%v", *resp.Status.ErrorMessage)//, resp.Status.InfoMessages, *resp.Status.ErrorCode, *resp.Status.SqlState)//resp.Status.String())
 	}
 
 	return resp.OperationHandle, err
