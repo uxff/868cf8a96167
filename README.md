@@ -12,7 +12,7 @@ go get -insecure "git.dev.acewill.net/rpc/Gohive"
 
 当前使用thrift-0.9.3版本，与hive的thrift对应。
 
-如果需要更新，则删除inf，将inf.ctx重命名为inf，进行go build会报错，将对应的thrift接口第一个参数增加context.TODO(), 即可。
+如果需要更新，则删除inf，将inf.ctx重命名为inf，进行go build会报错，将对应的thrift接口第一个参数增加context.Background()或者自定义context, 即可。
 
 sql语法中查询字段设置别名必须用反引号 ` 。
 
